@@ -25,6 +25,20 @@ asking a maintainer to enable it — without including any vulnerability details
 - For dependency advisories, a Dependabot alert is usually sufficient; a direct
   report is only needed when you have a concrete, exploitable finding.
 
+## Automated secret-leak prevention
+
+Selamy Labs repos run a **PR-diff secret-scan CI gate**
+([`.github/workflows/secret-scan.yml`](./.github/workflows/secret-scan.yml),
+backed by [`.gitleaks.toml`](./.gitleaks.toml)). It fails CI when a pull
+request introduces a plaintext credential (API keys, tokens, service-account
+private keys, DB URLs with embedded passwords, etc.). It scans only the PR's
+changed commit range, so pre-existing history does not block new work.
+
+If the gate flags a real secret: rotate it immediately, remove it from the
+diff, and route the value through a secret store (GSM + ExternalSecrets, repo
+secrets, or `pass`) — never commit the literal. False positives are tuned in
+the shared `.gitleaks.toml` allowlist.
+
 ## What to expect
 
 - Acknowledgement that the report was received.
