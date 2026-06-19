@@ -1,0 +1,135 @@
+# Selamy Labs shared gitleaks config (laneq #850/#857/#209).
+#
+# Consumed by the reusable secret-scan workflow
+# (.github/workflows/secret-scan.yml) in PR-diff mode. Extends the gitleaks
+# built-in rules and adds/tunes rules for the credential shapes the fleet has
+# actually leaked, plus an allowlist for obvious non-secrets (env-var
+# references, secretKeyRef, `pass show`, placeholders, redactions, fixtures,
+# lockfiles).
+#
+# Edit this file to tune detection fleet-wide; the reusable workflow fetches it
+# from selamy-labs/.github@<config-ref>.
+
+# Inherit gitleaks' maintained default ruleset, then extend below.
+[extend]
+useDefault = true
+
+# ---------------------------------------------------------------------------
+# Custom rules for the patterns we have actually leaked.
+# (Some overlap with gitleaks defaults; we keep explicit rules so detection of
+#  these shapes is guaranteed and independently tunable.)
+# ---------------------------------------------------------------------------
+
+[[rules]]
+id = "selamy-openrouter-key"
+description = "OpenRouter API key"
+regex = '''sk-or-v1-[0-9a-f]{32,}'''
+keywords = ["sk-or-v1-"]
+
+[[rules]]
+id = "selamy-anthropic-key"
+description = "Anthropic API key"
+regex = '''sk-ant-(?:api03|admin01)?-?[A-Za-z0-9_\-]{80,}'''
+keywords = ["sk-ant-"]
+
+[[rules]]
+id = "selamy-stripe-clerk-secret"
+description = "Stripe/Clerk live or test secret key"
+regex = '''sk_(?:live|test)_[0-9A-Za-z]{20,}'''
+keywords = ["sk_live_", "sk_test_"]
+
+[[rules]]
+id = "selamy-google-api-key"
+description = "Google API key (AIza...)"
+regex = '''AIza[0-9A-Za-z\-_]{35}'''
+keywords = ["AIza"]
+
+[[rules]]
+id = "selamy-google-oauth-secret"
+description = "Google OAuth client secret (GOCSPX-)"
+regex = '''GOCSPX-[0-9A-Za-z\-_]{20,}'''
+keywords = ["GOCSPX-"]
+
+[[rules]]
+id = "selamy-gcp-service-account-key"
+description = "GCP/Firebase service-account JSON private key block"
+regex = '''-----BEGIN (?:RSA |EC )?PRIVATE KEY-----'''
+keywords = ["BEGIN", "PRIVATE KEY"]
+
+[[rules]]
+id = "selamy-gcp-service-account-type"
+description = "GCP/Firebase service-account JSON marker"
+regex = '''"type"\s*:\s*"service_account"'''
+keywords = ["service_account"]
+
+[[rules]]
+id = "selamy-github-pat"
+description = "GitHub Personal Access Token (classic or fine-grained)"
+regex = '''(?:ghp_[0-9A-Za-z]{36}|github_pat_[0-9A-Za-z_]{60,})'''
+keywords = ["ghp_", "github_pat_"]
+
+[[rules]]
+id = "selamy-aws-access-key-id"
+description = "AWS Access Key ID"
+regex = '''(?:AKIA|ASIA)[0-9A-Z]{16}'''
+keywords = ["AKIA", "ASIA"]
+
+[[rules]]
+id = "selamy-postgres-url-password"
+description = "Postgres connection URL with embedded password"
+regex = '''postg(?:res|resql)://[^:\s/]+:[^@\s/]+@[^\s/]+'''
+keywords = ["postgres://", "postgresql://"]
+
+# ---------------------------------------------------------------------------
+# Global allowlist: obvious non-secrets and intentional references.
+# ---------------------------------------------------------------------------
+[allowlist]
+description = "Selamy global allowlist for non-secret references and fixtures"
+
+# Files/paths that legitimately contain secret-shaped strings.
+paths = [
+  '''(?i).*\.lock$''',
+  '''(?i)(^|/)package-lock\.json$''',
+  '''(?i)(^|/)yarn\.lock$''',
+  '''(?i)(^|/)pnpm-lock\.yaml$''',
+  '''(?i)(^|/)poetry\.lock$''',
+  '''(?i)(^|/)go\.sum$''',
+  '''(?i)(^|/)cargo\.lock$''',
+  '''(?i)(^|/)\.gitleaks\.toml$''',
+  '''(?i)(^|/)(test|tests|testdata|fixtures|__fixtures__|__mocks__|examples?)(/|$)''',
+  '''(?i).*\.(snap|golden)$''',
+]
+
+# Lines whose secret-shaped value is plainly a reference, placeholder, or
+# redaction rather than a real credential.
+regexes = [
+  # Shell/CI/Helm env-var and templating references: ${VAR}, $VAR, {{ .X }}
+  '''\$\{[^}]+\}''',
+  '''\$[A-Z][A-Z0-9_]+''',
+  '''\{\{[^}]*\}\}''',
+  # Kubernetes / ExternalSecrets / Helm secret indirection (value is a key name)
+  '''valueFrom''',
+  '''secretKeyRef''',
+  '''secretName''',
+  '''externalSecret''',
+  # `pass show <path>` and gcloud/GSM secret indirection (no literal value)
+  '''pass\s+show\s''',
+  '''secretmanager''',
+  '''gcloud\s+secrets''',
+  # Explicit redactions / placeholders
+  '''<REDACTED>''',
+  '''(?i)redacted''',
+  '''(?i)\b(your|my|some|the)[-_]?(api[-_]?key|secret|token|password)\b''',
+  '''(?i)(example|placeholder|dummy|fake|sample|changeme|xxxx+|\*{4,})''',
+  '''(?i)(\bTODO\b|\bFIXME\b)''',
+]
+
+# Specific high-frequency stopwords that show up in default-rule matches.
+stopwords = [
+  "example",
+  "placeholder",
+  "redacted",
+  "changeme",
+  "your-key-here",
+  "test",
+]
